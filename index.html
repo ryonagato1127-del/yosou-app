@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>予想アプリ</title>
+<style>
+body{font-family:sans-serif;padding:20px}
+textarea{width:100%;height:120px}
+table{border-collapse:collapse;width:100%;margin-top:10px}
+th,td{border:1px solid #ccc;padding:6px;text-align:center}
+select{width:100%}
+button{margin:5px;padding:10px}
+</style>
+</head>
+<body>
+
+<h1>🔥 予想アプリ（軽量版）</h1>
+
+<p>① 試合カード貼る（例：A vs B）</p>
+<textarea id="matches"></textarea>
+
+<button onclick="build()">シート生成</button>
+
+<br>名前：
+<input id="n1" placeholder="人1">
+<input id="n2" placeholder="人2">
+<input id="n3" placeholder="人3">
+<input id="n4" placeholder="人4">
+
+<table id="t"></table>
+
+<button onclick="share()">共有URL作成</button>
+<p id="url"></p>
+
+<script>
+function build(){
+ t.innerHTML="<tr><th>試合</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>";
+ let lines=matches.value.split("\\n");
+ lines.forEach(line=>{
+  if(!line.includes("vs")) return;
+  let [a,b]=line.split("vs");
+  let row="<tr><td>"+line+"</td>";
+  for(let i=0;i<4;i++){
+   row+=`<td><select><option></option><option>${a.trim()}</option><option>${b.trim()}</option></select></td>`;
+  }
+  row+="</tr>";
+  t.innerHTML+=row;
+ });
+}
+
+function share(){
+ let data={
+  names:[n1.value,n2.value,n3.value,n4.value],
+  matches:matches.value,
+  picks:[...document.querySelectorAll("select")].map(s=>s.value)
+ };
+ let enc=btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+ let url=location.href.split("#")[0]+"#"+enc;
+ document.getElementById("url").innerHTML="<a href='"+url+"'>"+url+"</a>";
+}
+
+if(location.hash){
+ try{
+  let d=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1)))));
+  matches.value=d.matches;
+  [n1.value,n2.value,n3.value,n4.value]=d.names;
+  build();
+  let sels=document.querySelectorAll("select");
+  sels.forEach((s,i)=>s.value=d.picks[i]||"");
+ }catch(e){}
+}
+</script>
+
+</body>
+</html>
