@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>予想アプリ</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+</head>
+<body>
+<h1>📸予想アプリ</h1>
+<input type="file" id="img"><br>
+<button onclick="ocr()">抽出</button>
+<textarea id="matches"></textarea>
+<table id="t"></table>
+
+<script>
+async function ocr(){
+ let f=img.files[0];
+ if(!f)return;
+ let r=await Tesseract.recognize(f,'jpn+eng');
+ let lines=r.data.text.split("\\n").filter(l=>l.match(/vs|VS|対/));
+ matches.value=lines.join("\\n");
+}
+
+function build(){
+ t.innerHTML="";
+ matches.value.split("\\n").forEach(l=>{
+  if(!l.match(/vs|VS|対/))return;
+  let[a,b]=l.split(/vs|VS|対/);
+  t.innerHTML+=`<tr><td>${l}</td><td><select><option>${a}</option><option>${b}</option></select></td></tr>`;
+ });
+}
+</script>
+<button onclick="build()">生成</button>
+</body>
+</html>
