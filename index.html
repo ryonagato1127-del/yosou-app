@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Fight Predictor</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+<style>
+body{
+ background:#0f172a;
+ color:#fff;
+ font-family:sans-serif;
+ padding:20px;
+}
+h1{font-size:24px;margin-bottom:10px}
+
+.card{
+ background:#1e293b;
+ padding:15px;
+ border-radius:12px;
+ margin-bottom:10px;
+ box-shadow:0 0 10px rgba(0,0,0,0.3);
+}
+
+button{
+ background:#3b82f6;
+ color:#fff;
+ border:none;
+ padding:8px 10px;
+ border-radius:8px;
+ margin:3px;
+}
+
+.player-btn{
+ background:#334155;
+}
+
+.active{
+ background:#22c55e !important;
+}
+
+input{
+ margin:5px;
+ padding:8px;
+ border-radius:8px;
+ border:none;
+}
+
+textarea{
+ width:100%;
+ height:100px;
+ border-radius:8px;
+ margin-top:10px;
+}
+
+.loading{
+ color:#38bdf8;
+ margin-top:10px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🔥 Fight Predictor</h1>
+
+<!-- 名前 -->
+<div>
+<input id="name0" placeholder="プレイヤー1">
+<input id="name1" placeholder="プレイヤー2">
+<input id="name2" placeholder="プレイヤー3">
+<input id="name3" placeholder="プレイヤー4">
+</div>
+
+<input type="file" id="img">
+<button onclick="ocr()">画像読み込み</button>
+
+<div id="status" class="loading"></div>
+
+<textarea id="matches" placeholder="ここにカード表示（修正OK）"></textarea>
+<button onclick="build()">シート生成</button>
+
+<div id="fights"></div>
+
+<script>
+let data=[];
+
+function getNames(){
+ return [
+  document.getElementById("name0").value || "P1",
+  document.getElementById("name1").value || "P2",
+  document.getElementById("name2").value || "P3",
+  document.getElementById("name3").value || "P4"
+ ];
+}
+
+// 🔥 OCR（改良版）
+async function ocr(){
+ let file = document.getElementById("img").files[0];
+ if(!file) return alert("画像選択して");
+
+ document.getElementById("status").innerText="読み込み中…（10秒くらい）";
+
+ try{
+  let result = await Tesseract.recognize(file,'jpn+eng');
+  let text = result.data.text;
+
+  // 👇 改良抽出（順番安定）
+  let matchesArr = text.match(/[^\n]+?(vs|VS|対)[^\n]+/g);
+
+  let lines = matchesArr
+    ? matchesArr.map(l => l.replace(/\s+/g," ").trim())
+    : [];
+
+  document.getElementById("matches").value = lines.join("\n");
+
+  document.getElementById("status").innerText="完了！";
+ }catch(e){
+  document.getElementById("status").innerText="エラー（画像変えてみて）";
+ }
+}
+
+// 🔥 シート生成
+function build(){
+ let container=document.getElementById("fights");
+ container.innerHTML="";
+ data=[];
+
+ let names=getNames();
+ let lines=document.getElementById("matches").value.split("\n");
+
+ lines.forEach((line,i)=>{
+  if(!line.match(/vs|VS|対/)) return;
+
+  let [a,b]=line.split(/vs|VS|対/);
+  a=a.trim(); b=b.trim();
+
+  data.push({a,b,picks:[null,null,null,null]});
+
+  let div=document.createElement("div");
+  div.className="card";
+
+  div.innerHTML=`
+    <div><b>${a} vs ${b}</b></div>
+    ${[0,1,2,3].map(p=>`
+      <div>
+        ${names[p]}：
+        <button class="player-btn" onclick="pick(${i},${p},'${a}',this)">${a}</button>
+        <button class="player-btn" onclick="pick(${i},${p},'${b}',this)">${b}</button>
+      </div>
+    `).join("")}
+  `;
+
+  container.appendChild(div);
+ });
+}
+
+// 🔥 選択
+function pick(i,p,name,btn){
+ data[i].picks[p]=name;
+
+ let parent=btn.parentElement;
+ parent.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
+ btn.classList.add("active");
+}
+</script>
+
+</body>
+</html>
