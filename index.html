@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>勝敗予想</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@900&display=swap" rel="stylesheet">
+
+<style>
+body{
+ background:#0b0f1a;
+ color:#fff;
+ font-family:-apple-system, BlinkMacSystemFont, sans-serif;
+ margin:0;
+ padding:15px;
+}
+
+/* 🔥 トップ */
+.hero{
+ position:relative;
+ width:100%;
+ height:180px;
+ background:#000;
+ background-size:contain; /* ←全体表示 */
+ background-repeat:no-repeat;
+ background-position:center;
+ border-radius:14px;
+ margin-bottom:10px;
+}
+
+/* 🔥 タイトルを重ねる */
+.title{
+ position:absolute;
+ bottom:10px;
+ left:50%;
+ transform:translateX(-50%);
+ font-size:28px;
+ font-family:'Noto Sans JP', sans-serif;
+ font-weight:900;
+ letter-spacing:4px;
+ background:linear-gradient(90deg,#ef4444,#f97316);
+ -webkit-background-clip:text;
+ -webkit-text-fill-color:transparent;
+ text-shadow:0 0 10px rgba(0,0,0,0.8);
+}
+
+/* カード */
+.card{
+ background:#111827;
+ padding:10px;
+ border-radius:12px;
+ margin-bottom:10px;
+}
+
+.line{
+ display:flex;
+ align-items:center;
+ gap:6px;
+ white-space:nowrap;
+ overflow-x:auto;
+ margin-bottom:4px;
+}
+
+button{
+ border:none;
+ padding:6px 10px;
+ border-radius:8px;
+ font-size:12px;
+}
+
+.player-btn{ background:#1f2937; color:#fff; }
+.active{ background:#22c55e !important; }
+.winner-btn{ background:#ef4444; color:#fff; }
+
+input, textarea{
+ width:100%;
+ margin:5px 0;
+ padding:10px;
+ border-radius:8px;
+ border:none;
+}
+
+.rank{
+ background:#020617;
+ padding:10px;
+ border-radius:10px;
+ margin:10px 0;
+}
+</style>
+</head>
+
+<body>
+
+<div id="hero" class="hero">
+  <div class="title">勝敗予想</div>
+</div>
+
+<input type="file" accept="image/*" onchange="setHero(event)">
+
+<input id="name0" placeholder="プレイヤー1">
+<input id="name1" placeholder="プレイヤー2">
+<input id="name2" placeholder="プレイヤー3">
+<input id="name3" placeholder="プレイヤー4">
+
+<textarea id="matches" placeholder="朝倉未来 vs 平本蓮"></textarea>
+
+<button onclick="build()">シート生成</button>
+
+<div id="ranking" class="rank"></div>
+<button onclick="calc()">ランキング更新</button>
+
+<div id="fights"></div>
+
+<script>
+let data=[];
+
+function setHero(e){
+ let file=e.target.files[0];
+ if(!file)return;
+
+ let reader=new FileReader();
+ reader.onload=ev=>{
+  hero.style.backgroundImage=`url(${ev.target.result})`;
+ };
+ reader.readAsDataURL(file);
+}
+
+function getNames(){
+ return [
+  name0.value || "P1",
+  name1.value || "P2",
+  name2.value || "P3",
+  name3.value || "P4"
+ ];
+}
+
+function parseLine(line){
+ let clean=line.trim().replace(/\s+/g," ");
+ let parts=clean.split(/vs|VS|ｖｓ|対/);
+ if(parts.length<2)return null;
+ return [parts[0].trim(),parts[1].trim()];
+}
+
+function build(){
+ fights.innerHTML="";
+ data=[];
+
+ let names=getNames();
+ let lines=matches.value.split("\n").filter(l=>l.trim());
+ let total=lines.length;
+
+ lines.forEach((line,i)=>{
+  let parsed=parseLine(line);
+  if(!parsed)return;
+
+  let [a,b]=parsed;
+
+  data.push({a,b,picks:[null,null,null,null],winner:null});
+
+  let num = total - i;
+
+  let div=document.createElement("div");
+  div.className="card";
+
+  div.innerHTML=`
+    <div class="line"><b>${num}. ${a} vs ${b}</b></div>
+
+    ${[0,1,2,3].map(p=>`
+      <div class="line">
+        ${names[p]}
+        <button class="player-btn" onclick="pick(${i},${p},'${a}',this)">${a}</button>
+        <button class="player-btn" onclick="pick(${i},${p},'${b}',this)">${b}</button>
+      </div>
+    `).join("")}
+
+    <div class="line">
+      勝者
+      <button class="winner-btn" onclick="setWinner(${i},'${a}',this)">${a}</button>
+      <button class="winner-btn" onclick="setWinner(${i},'${b}',this)">${b}</button>
+    </div>
+  `;
+
+  fights.appendChild(div);
+ });
+}
+
+function pick(i,p,name,btn){
+ data[i].picks[p]=name;
+ btn.parentElement.querySelectorAll(".player-btn").forEach(b=>b.classList.remove("active"));
+ btn.classList.add("active");
+}
+
+function setWinner(i,name,btn){
+ data[i].winner=name;
+ btn.parentElement.querySelectorAll(".winner-btn").forEach(b=>b.classList.remove("active"));
+ btn.classList.add("active");
+}
+
+function calc(){
+ let scores=[0,0,0,0];
+ let validMatches=0;
+
+ data.forEach(match=>{
+  if(!match.winner)return;
+  validMatches++;
+
+  match.picks.forEach((p,i)=>{
+    if(p===match.winner) scores[i]++;
+  });
+ });
+
+ let names=getNames();
+
+ let result=names.map((n,i)=>{
+   let rate = validMatches ? Math.round((scores[i]/validMatches)*100) : 0;
+   return {name:n,score:scores[i],rate};
+ }).sort((a,b)=>b.score-a.score);
+
+ ranking.innerHTML="<h3>🏆 ランキング</h3>"+
+ result.map((r,i)=>
+   (i===0 ? "🥇 " : `${i+1}位：`) +
+   `${r.name}（${r.score}勝 / ${r.rate}%）`
+ ).join("<br>");
+}
+</script>
+
+</body>
+</html>
