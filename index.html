@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>勝敗予想</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@900&display=swap" rel="stylesheet">
+
+<style>
+body{
+ background:#0b0f1a;
+ color:#fff;
+ font-family:-apple-system, BlinkMacSystemFont, sans-serif;
+ margin:0;
+ padding:15px;
+}
+
+.hero{
+ position:relative;
+ width:100%;
+ height:180px;
+ background:#000;
+ background-size:contain;
+ background-repeat:no-repeat;
+ background-position:center;
+ border-radius:14px;
+ margin-bottom:10px;
+}
+
+.title{
+ position:absolute;
+ bottom:10px;
+ left:50%;
+ transform:translateX(-50%);
+ font-size:clamp(32px, 8vw, 48px);
+ font-family:'Noto Sans JP', sans-serif;
+ font-weight:900;
+ letter-spacing:6px;
+ background:linear-gradient(90deg,#ef4444,#f97316);
+ -webkit-background-clip:text;
+ -webkit-text-fill-color:transparent;
+ text-shadow:0 2px 12px rgba(0,0,0,0.9);
+}
+
+.hidden{ display:none; }
+
+.hideFighters .player-btn{
+ display:none;
+}
+
+.card{
+ background:#111827;
+ padding:10px;
+ border-radius:12px;
+ margin-bottom:10px;
+}
+
+.line{
+ display:flex;
+ align-items:center;
+ gap:6px;
+ white-space:nowrap;
+ overflow-x:auto;
+ margin-bottom:4px;
+}
+
+button{
+ border:none;
+ padding:6px 10px;
+ border-radius:8px;
+ font-size:12px;
+ font-weight:bold;
+}
+
+.player-btn{ background:#1f2937; color:#fff; }
+.active{ background:#22c55e !important; }
+.winner-btn{ background:#ef4444; color:#fff; }
+
+input, textarea{
+ width:100%;
+ margin:5px 0;
+ padding:10px;
+ border-radius:8px;
+ border:none;
+}
+
+.rank{
+ background:#020617;
+ padding:10px;
+ border-radius:10px;
+ margin:10px 0;
+}
+</style>
+</head>
+
+<body>
+
+<div id="hero" class="hero">
+  <div class="title">勝敗予想</div>
+</div>
+
+<input type="file" accept="image/*" onchange="setHero(event)">
+
+<div id="setup">
+  <input id="name0" placeholder="プレイヤー1">
+  <input id="name1" placeholder="プレイヤー2">
+  <input id="name2" placeholder="プレイヤー3">
+  <input id="name3" placeholder="プレイヤー4">
+
+  <textarea id="matches"></textarea>
+
+  <button onclick="build()">シート生成</button>
+</div>
+
+<div id="ranking" class="rank"></div>
+<button onclick="calc()">ランキング更新</button>
+<button onclick="share()">共有（コピー）</button>
+<button onclick="resetAll()">リセット</button>
+
+<div id="fights"></div>
+
+<script>
+let data=[];
+
+/* ===== 保存（最強版） ===== */
+function saveData(){
+ let payload={
+  names:getNames(),
+  matches:matches.value,
+  data:data,
+  img:hero.dataset.img||""
+ };
+
+ // ローカル保存
+ localStorage.setItem("fightAppData", JSON.stringify(payload));
+
+ // URLバックアップ
+ let url = location.href.split("#")[0] + "#" + btoa(JSON.stringify(payload));
+ history.replaceState(null, "", url);
+}
+
+/* ページ離脱時も保存 */
+window.addEventListener("beforeunload", saveData);
+
+/* ===== 画像 ===== */
+function setHero(e){
+ let file=e.target.files[0];
+ if(!file)return;
+
+ let reader=new FileReader();
+ reader.onload=ev=>{
+  hero.dataset.img=ev.target.result;
+  hero.style.backgroundImage=`url(${ev.target.result})`;
+  saveData();
+ };
+ reader.readAsDataURL(file);
+}
+
+function getNames(){
+ return [name0.value,name1.value,name2.value,name3.value];
+}
+
+function parseLine(line){
+ let parts=line.split(/vs|VS|ｖｓ|対/);
+ if(parts.length<2)return null;
+ return [parts[0].trim(),parts[1].trim()];
+}
+
+/* ===== シート生成（消えない版） ===== */
+function build(){
+ fights.innerHTML="";
+
+ if(!data || data.length===0){
+  data=[];
+ }
+
+ let names=getNames();
+ let lines=matches.value.split("\n").filter(l=>l.trim());
+ let total=lines.length;
+
+ lines.forEach((line,i)=>{
+  let parsed=parseLine(line);
+  if(!parsed)return;
+
+  let [a,b]=parsed;
+
+  if(!data[i]){
+    data[i]={a,b,picks:[null,null,null,null],winner:null};
+  }
+
+  let num=total-i;
+
+  let div=document.createElement("div");
+  div.className="card";
+
+  div.innerHTML=`
+    <div class="line"><b>${num}. ${a} vs ${b}</b></div>
+
+    ${[0,1,2,3].map(p=>`
+      <div class="line" id="p${p}-${i}">
+        ${names[p]||"P"+(p+1)}
+
+        <button class="player-btn" onclick="pick(${i},${p},'${a}',this)">${a}</button>
+        <button class="player-btn" onclick="pick(${i},${p},'${b}',this)">${b}</button>
+
+        <button onclick="toggleRow('p${p}-${i}', this)">非</button>
+      </div>
+    `).join("")}
+
+    <div class="line">
+      勝者
+      <button class="winner-btn" onclick="setWinner(${i},'${a}',this)">${a}</button>
+      <button class="winner-btn" onclick="setWinner(${i},'${b}',this)">${b}</button>
+    </div>
+  `;
+
+  fights.appendChild(div);
+ });
+
+ setup.classList.add("hidden");
+ restoreUI();
+ saveData();
+}
+
+/* ===== 非表示 ===== */
+function toggleRow(id, btn){
+ let row=document.getElementById(id);
+
+ if(row.classList.contains("hideFighters")){
+  row.classList.remove("hideFighters");
+  btn.innerText="非";
+ }else{
+  row.classList.add("hideFighters");
+  btn.innerText="表示";
+ }
+
+ saveData();
+}
+
+/* ===== トグル選択 ===== */
+function pick(i,p,name,btn){
+ if(data[i].picks[p] === name){
+  data[i].picks[p]=null;
+  btn.classList.remove("active");
+ }else{
+  data[i].picks[p]=name;
+  btn.parentElement.querySelectorAll(".player-btn")
+    .forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+ }
+ saveData();
+}
+
+function setWinner(i,name,btn){
+ if(data[i].winner === name){
+  data[i].winner=null;
+  btn.classList.remove("active");
+ }else{
+  data[i].winner=name;
+  btn.parentElement.querySelectorAll(".winner-btn")
+    .forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+ }
+ saveData();
+}
+
+/* ===== UI復元 ===== */
+function restoreUI(){
+ data.forEach((match,i)=>{
+  let card=fights.children[i];
+  if(!card)return;
+
+  let lines=card.querySelectorAll(".line");
+
+  match.picks.forEach((pick,p)=>{
+    if(!pick)return;
+    let btns=lines[p+1].querySelectorAll(".player-btn");
+    btns.forEach(b=>{
+      if(b.innerText===pick) b.classList.add("active");
+    });
+  });
+
+  if(match.winner){
+    let btns=lines[lines.length-1].querySelectorAll(".winner-btn");
+    btns.forEach(b=>{
+      if(b.innerText===match.winner) b.classList.add("active");
+    });
+  }
+ });
+}
+
+/* ===== ランキング ===== */
+function calc(){
+ let scores=[0,0,0,0];
+ let valid=0;
+
+ data.forEach(m=>{
+  if(!m.winner)return;
+  valid++;
+  m.picks.forEach((p,i)=>{
+    if(p===m.winner)scores[i]++;
+  });
+ });
+
+ let names=getNames();
+
+ let result=names.map((n,i)=>{
+   let rate=valid?Math.round(scores[i]/valid*100):0;
+   return {name:n||"P"+(i+1),score:scores[i],rate};
+ }).sort((a,b)=>b.score-a.score);
+
+ let rank=0,prev=null;
+
+ ranking.innerHTML="<h3>🏆 ランキング</h3>"+
+ result.map((r,i)=>{
+  if(r.score!==prev) rank=i+1;
+  prev=r.score;
+
+  let medal = rank==1?"🥇 ":rank==2?"🥈 ":rank==3?"🥉 ":`${rank}位：`;
+  return `${medal}${r.name}（${r.score}勝 / ${r.rate}%）`;
+ }).join("<br>");
+}
+
+/* ===== 共有 ===== */
+function share(){
+ navigator.clipboard.writeText(location.href);
+ alert("URLコピーした！");
+}
+
+/* ===== リセット ===== */
+function resetAll(){
+ if(confirm("全部消す？")){
+  localStorage.removeItem("fightAppData");
+  location.href = location.href.split("#")[0];
+ }
+}
+
+/* ===== 自動保存 ===== */
+name0.oninput=saveData;
+name1.oninput=saveData;
+name2.oninput=saveData;
+name3.oninput=saveData;
+matches.oninput=saveData;
+
+/* ===== 初期復元 ===== */
+window.onload=()=>{
+ let saved=localStorage.getItem("fightAppData");
+
+ if(saved){
+  try{
+   let d=JSON.parse(saved);
+
+   [name0.value,name1.value,name2.value,name3.value]=d.names;
+   matches.value=d.matches;
+
+   if(d.img){
+    hero.style.backgroundImage=`url(${d.img})`;
+    hero.dataset.img=d.img;
+   }
+
+   data=d.data||[];
+   build();
+  }catch(e){}
+ }
+
+ if(location.hash){
+  try{
+   let d=JSON.parse(atob(location.hash.slice(1)));
+
+   [name0.value,name1.value,name2.value,name3.value]=d.names;
+   matches.value=d.matches;
+
+   if(d.img){
+    hero.style.backgroundImage=`url(${d.img})`;
+    hero.dataset.img=d.img;
+   }
+
+   data=d.data||[];
+   build();
+  }catch(e){}
+ }
+};
+</script>
+
+</body>
+</html>
